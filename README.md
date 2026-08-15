@@ -9,7 +9,7 @@
 
 jindu1是2d的，jindu2是3d的（jindu2运行main.py时不生成整个星系的3d，单独运行weitushengcheng_yinheditu3d.py时生成整个星系的3d）。
 
-这个项目是学习pioneerspacesim[https://github.com/pioneerspacesim/pioneer]星图的实现而产生的。
+这个项目是学习[pioneerspacesim](https://github.com/pioneerspacesim/pioneer)星图的实现而产生的。
 
 # jindu2的weitushengcheng.py的思路如下：
 
