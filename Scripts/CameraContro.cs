@@ -1,11 +1,8 @@
-using System.Collections;
-using System.Collections.Generic;
-using UnityEngine;
-using static UnityEngine.GraphicsBuffer;
+ï»¿using UnityEngine;
+using UnityEngine.SceneManagement;
 
 public class CameraContro : MonoBehaviour
 {
-
     public GameObject Target;
     public GameObject Target2;
 
@@ -22,107 +19,137 @@ public class CameraContro : MonoBehaviour
     private float horizontalMove, verticalMove, shangxiaMove;
     public float moveSpeed;
     private Vector3 fangxiang;
-    
+
+    // ================= floating origin =================
+    // Unity çš„ Transform.position æ˜¯ Vector3(float)ï¼šåæ ‡æ•°å€¼è¶Šå¤§ï¼Œç›¸é‚»ä¸¤ä¸ª
+    // å¯è¡¨ç¤ºçš„æ•°ä¹‹é—´éš”å¾—è¶Šè¿œï¼ˆ|X|~2300 æ—¶çº¦ 2.4e-4ï¼Œ~50000 æ—¶çº¦ 3.9e-3ï¼‰ã€‚
+    // ç›¸æœºæ¯å¸§çš„å°ä½ç§»ä¸€æ—¦å°äºè¿™ä¸ªé—´éš”å°±è¢«èˆå…¥æ‰ï¼Œç´¯ç§¯åä¸€æ¬¡è·³ä¸€æ•´æ ¼ï¼Œ
+    // å³è¿œå¤„æ’æ˜ŸæŠ½æã€‚è®©ç›¸æœºå§‹ç»ˆå¾…åœ¨åŸç‚¹é™„è¿‘å³å¯æ¶ˆé™¤ï¼šè¶…è¿‡é˜ˆå€¼æ—¶æŠŠæ•´ä¸ª
+    // åœºæ™¯ï¼ˆæ‰€æœ‰æ ¹ç‰©ä½“ï¼‰ä¸€èµ·å¹³ç§»ï¼Œç‰©ä½“é—´ç›¸å¯¹ä½ç½®ä¸å˜ï¼Œç”»é¢ä¸åŠ¨ã€‚
+    [Tooltip("ç›¸æœºç¦»ä¸–ç•ŒåŸç‚¹è¶…è¿‡è¯¥è·ç¦»æ—¶ï¼ŒæŠŠæ•´ä¸ªä¸–ç•Œå¹³ç§»å›åŸç‚¹é™„è¿‘")]
+    public float originThreshold = 100f;
+
+    // ç´¯è®¡å¹³ç§»é‡ç”¨ double ä¿å­˜ï¼Œä¾¿äºä»¥åè¿˜åŸç»å¯¹åæ ‡ / åš LOD æˆ–ç‰©ç†
+    private double originOffsetX = 0.0;
+    private double originOffsetY = 0.0;
+    private double originOffsetZ = 0.0;
+
+    public void GetOriginOffset(out double x, out double y, out double z)
+    {
+        x = originOffsetX; y = originOffsetY; z = originOffsetZ;
+    }
 
     void Start()
     {
         cc = GetComponent<CharacterController>();
-        Target = GameObject.Find("Sun");
+        if (Target == null)
+        {
+            Target = GameObject.Find("Sun");
+        }
+        if (Target == null)
+        {
+            Debug.LogWarning("CameraContro: æœªæ‰¾åˆ° Sunï¼Œä¹Ÿæœªåœ¨ Inspector æŒ‡å®š Targetã€‚");
+        }
+        ApplyFloatingOrigin();
     }
-
 
     void Update()
     {
-        cameraView();                                     //Õâ¸öº¯ÊıÊµÏÖÁËÉãÏñ»úÊÓ½ÇµÄ360¶È±ä»¯
-       CameraZoom();                                      //Õâ¸öº¯ÊıÊµÏÖÁËÉãÏñ»úÊÓ½ÇµÄËõ·Å
-        cameraMove();                                     //Õâ¸öº¯ÊıÊµÏÖÁËÉãÏñ»úÔÚ¿Õ¼äÖĞµÄ×ÔÓÉÒÆ¶¯
+        cameraView();        // æŒ‰ä½å·¦é”®æ—‹è½¬è§†è§’
+        CameraZoom();        // æ»šè½®ç¼©æ”¾
+        cameraMove();        // Tab + æ–¹å‘é”®è‡ªç”±ç§»åŠ¨
     }
-
 
     void LateUpdate()
     {
         MouseClick();
 
         if (Input.GetKey(KeyCode.Escape))
-
         {
-
             Application.Quit();
+        }
 
+        // æ‰€æœ‰ä½ç½®è¿ç®—ç»“æŸåå†åˆ¤æ–­æ˜¯å¦æŠŠä¸–ç•Œæ‹‰å›åŸç‚¹
+        ApplyFloatingOrigin();
+    }
+
+    /// <summary>
+    /// ç›¸æœºè¿œç¦»åŸç‚¹æ—¶ï¼ŒæŠŠåœºæ™¯é‡Œæ‰€æœ‰æ ¹ç‰©ä½“ä¸€èµ·å¹³ç§»å›åŸç‚¹é™„è¿‘ã€‚
+    /// åªæ”¹æ ¹ Transformï¼šå­ç‰©ä½“æ˜¯å±€éƒ¨åæ ‡ï¼Œä¼šè·Ÿç€çˆ¶ç‰©ä½“ä¸€èµ·èµ°ï¼Œæ— éœ€é€ä¸ªå¤„ç†ã€‚
+    /// ç›¸æœºæœ¬èº«ä¹Ÿæ˜¯æ ¹ç‰©ä½“ï¼Œå¹³ç§»å transform.position å›åˆ° 0 é™„è¿‘ï¼Œ
+    /// Target ä¸ç›¸æœºéƒ½å˜æˆå°æ•°å€¼ï¼Œå¤§æ•°ç›¸å‡ã€å¤§æ•°åŠ å°åç§»çš„ç²¾åº¦æŸå¤±åŒæ—¶æ¶ˆå¤±ã€‚
+    /// </summary>
+    private void ApplyFloatingOrigin()
+    {
+        Vector3 p = transform.position;
+        if (p.magnitude < originThreshold) return;
+
+        Vector3 shift = new Vector3(Mathf.Round(p.x), Mathf.Round(p.y), Mathf.Round(p.z));
+        if (shift.sqrMagnitude < 1.0f) return;
+
+        originOffsetX += shift.x;
+        originOffsetY += shift.y;
+        originOffsetZ += shift.z;
+
+        foreach (GameObject root in SceneManager.GetActiveScene().GetRootGameObjects())
+        {
+            root.transform.position -= shift;
         }
     }
 
-
     private void cameraView()
     {
-       if (UnityEngine.Input.GetMouseButton(0))                                        //ÔÚ°´×¡Êó±ê×ó¼üµÄÇé¿öÏÂ
-        { 
-        
+        if (!UnityEngine.Input.GetMouseButton(0)) return;
+        if (Target == null) return;
+
         vertiAngle += UnityEngine.Input.GetAxis("Mouse Y");
         horiAngle -= UnityEngine.Input.GetAxis("Mouse X");
-           
-        
+
         Quaternion quaternion = Quaternion.Euler(vertiAngle, horiAngle, 0);
         transform.rotation = quaternion;
 
         distance = (Target.transform.position - transform.position).magnitude;
-
-
         tem = new Vector3(0, 0, -distance);
-
         Vector3 position = quaternion * tem + Target.transform.position;
-
         transform.position = position;
-        }
     }
-    
+
     public void CameraZoom()
     {
-        if (UnityEngine.Input.GetMouseButton(0))                                       //ÔÚ°´×¡Êó±ê×ó¼üµÄÇé¿öÏÂ
-        {
-            Vector3 dir = Camera.main.ScreenPointToRay(UnityEngine.Input.mousePosition).direction;
-            transform.position += dir * UnityEngine.Input.GetAxis("Mouse ScrollWheel") * mScrollValue;
-        }
+        if (!UnityEngine.Input.GetMouseButton(0)) return;
+        if (Camera.main == null) return;
+        Vector3 dir = Camera.main.ScreenPointToRay(UnityEngine.Input.mousePosition).direction;
+        transform.position += dir * UnityEngine.Input.GetAxis("Mouse ScrollWheel") * mScrollValue;
     }
-    
+
     private void cameraMove()
     {
-        if (UnityEngine.Input.GetKey(KeyCode.Tab))                                     //ÔÚ°´×¡tabµÄÇé¿öÏÂ
-        {
-            horizontalMove = UnityEngine.Input.GetAxis("Horizontal") * moveSpeed;      //ÓÃwºÍs¿ØÖÆÇ°ºó
-            verticalMove = UnityEngine.Input.GetAxis("Vertical") * moveSpeed;          //ÓÃaºÍd¿ØÖÆ×óÓÒ
-            shangxiaMove = UnityEngine.Input.GetAxis("Jump") * moveSpeed;              //ÓÃqºÍe¿ØÖÆÉÏÏÂ
+        if (!UnityEngine.Input.GetKey(KeyCode.Tab)) return;
+        if (cc == null) return;
 
-            fangxiang = transform.forward * verticalMove + transform.right * horizontalMove + transform.up * shangxiaMove;
-            cc.Move(fangxiang * Time.deltaTime);
-        }
+        horizontalMove = UnityEngine.Input.GetAxis("Horizontal") * moveSpeed;   // A / D å·¦å³
+        verticalMove = UnityEngine.Input.GetAxis("Vertical") * moveSpeed;       // W / S å‰å
+        shangxiaMove = UnityEngine.Input.GetAxis("Jump") * moveSpeed;           // ä¸Šä¸‹
 
-
+        fangxiang = transform.forward * verticalMove + transform.right * horizontalMove + transform.up * shangxiaMove;
+        cc.Move(fangxiang * Time.deltaTime);
     }
-
 
     void MouseClick()
     {
-        //»ñµÃÉãÏñÍ·ÓëÊó±êÎ»ÖÃ·½ÏòÉäÏßµÄÏòÁ¿
+        if (Camera.main == null) return;
         Ray ray = Camera.main.ScreenPointToRay(Input.mousePosition);
-        //new Vector3(Screen.width/2,Screen.height/2,0);»ñÈ¡ÆÁÄ»ÖĞĞÄµã£¬¿ÉÓ¦ÓÃµ½ÉÏ·½ÉäÏßÖĞ
-        //ÅĞ¶ÏÊÇ·ñµã»÷×ó¼ü&&ÉäÏßÊÇ·ñÅöµ½ÓĞÅö×²Æ÷µÄ¶«Î÷
-        if (Input.GetMouseButtonDown(1) && Physics.Raycast(ray, out RaycastHit hitinfo))
-        {
+        if (!Input.GetMouseButtonDown(1)) return;
+        if (!Physics.Raycast(ray, out RaycastHit hitinfo)) return;
 
-            Target2 = Target;
+        // ç›´æ¥ç”¨å‘½ä¸­çš„å¯¹è±¡ã€‚åŸå†™æ³•å…ˆæŠŠ Target ç½® nullï¼Œå†ç”¨
+        // GameObject.Find(åå­—) æ‰¾å›æ¥ï¼šFind å¯èƒ½è¿”å› nullï¼ˆéšåç©ºå¼•ç”¨ï¼‰ï¼Œ
+        // åœºæ™¯é‡Œæœ‰é‡åå¯¹è±¡æ—¶è¿˜ä¼šé€‰é”™ã€‚
+        GameObject picked = hitinfo.transform.gameObject;
+        if (picked == null) return;
 
-            Target = null;
-                      
-            Target = GameObject.Find(hitinfo.transform.name);                                                   //ÊµÏÖÁËÊó±êµãË­°ÑË­×÷ÎªÖĞĞÄÄ¿±ê
-
-            Vector3 juli =Target.transform.position - Target2.transform.position;
-
-            transform.LookAt(Target.transform.position);
-
-           // transform.position = Vector3.MoveTowards(transform.position, transform.position + juli,0.0002f * Time.deltaTime);
-        }
+        Target2 = Target;
+        Target = picked;
+        transform.LookAt(Target.transform.position);
     }
-
-
 }
